@@ -14,6 +14,8 @@ Autonomous iterative development loop for Forward One.
 
 > **Access note.** The account running this loop (`dmccoystephenson`) is a **collaborator** on `McElyea/forward-one`, not its owner: `viewerPermission` is `WRITE`, so push and triage are available and `admin` is not. Branches and PRs go directly to the upstream repo — there is no fork in the path, and no `--admin` merge is possible even if it were permitted.
 
+> **Known drift at generation time (2026-08-14, `main` @ `b23df91`).** Two claims in `AGENTS.md` were already stale when this skill was written, and are ready-made first-cycle work: it cites `RiverScene.init()` at `src/game/scenes/RiverScene.ts:73` (actually `:99`), and it says "`MenuScene` has no `init()`, which is the cause of [#1]" — `MenuScene.init()` exists at `src/game/scenes/MenuScene.ts:44` and resets `levelSelection`, `voiceButtons`, `selectedVoiceId`, and `relayout`. Re-verify both against source before filing; do not take this note as the finding.
+
 ---
 
 ## Full cycle
@@ -67,12 +69,12 @@ gh issue close <number> --comment "Resolved in PR #<n>."
 
 Scan for improvements not yet tracked:
 - Missing tests on new public methods
-- Doc drift between sources of truth (`README.md`, `AGENTS.md`, `package.json` scripts, `.github/workflows/ci.yml`) — `src/docs.test.ts` mechanically checks *some* of this (script list, Node floor, project-structure paths); everything else in those files is unguarded prose that only a human read catches
+- Doc drift between sources of truth (`README.md`, `AGENTS.md`, `package.json` scripts, `.github/workflows/ci.yml`) — `src/docs.test.ts` mechanically checks *some* of this (script list, Node floor, project-structure paths); everything else in those files is unguarded prose that only a human read catches, and `AGENTS.md`'s `file:line` citations drift silently every time a scene grows a field
 - Unhelpful error messages or missing usage strings on commands
 - **Behaviour-bearing logic living inside a scene.** `MenuScene.ts` / `RiverScene.ts` should draw and wire input only; judgment, selection, timing, and outcome logic belongs in a plain module beside `rhythm/RhythmEngine.ts`, `run/runOutcome.ts`, `ui/levelSelection.ts`. Scene-resident logic is untestable in this repo's node-environment suite
-- **Literal coordinates or sizes in a scene.** Anything positioned with a raw number instead of a region/point from `src/game/ui/layout.ts`, and any interactive element that could fall below `MIN_TOUCH_PX`
+- **Literal coordinates or sizes in a scene.** Anything positioned with a raw number instead of a region/point from `src/game/ui/layout.ts`, and any interactive element that could fall below `MIN_TOUCH_PX` (`layout.ts:38`, currently 44)
 - **Inline colour or text-style literals** instead of `COLORS` / `headingStyle()` / `bodyStyle()` from `src/game/ui/theme.ts`
-- **Scene fields initialized only by a class-field initializer.** Phaser reuses the scene instance, so any mutable field not reassigned in `init()` leaks state across visits (this is exactly issue #1's failure mode)
+- **Scene fields initialized only by a class-field initializer.** Phaser reuses the scene instance, so any mutable field not reassigned in `init()` leaks state across visits — the failure mode behind issue #1
 - **Objects placed without an `onLayout()` closure** in `RiverScene` — anything that will not survive a mid-run rotate
 - **`window.innerWidth` / `window.innerHeight` / `document` reads** outside the deliberate `localStorage` helpers in `guideAudio.ts` — size comes from `this.scale`
 - **Race/progress behaviour that requires editing `RiverScene` for a specific backend** — it belongs behind `RaceAdapter`
@@ -82,7 +84,7 @@ Scan for improvements not yet tracked:
 - Method names/call sites — grep to confirm existence and behaviour
 - "X doesn't exist" — read the file to confirm the absence
 - Example output — trace through code to confirm it is realistic
-- Line-number citations — `AGENTS.md` cites file:line (e.g. `RiverScene.ts:73`); re-read the line before repeating a citation, and update the citation if the line moved
+- Line-number citations — `AGENTS.md` cites `file:line`; re-read the line before repeating a citation, and update the citation if the line moved
 
 **After filing a batch of issues**, second-pass each one:
 - Title accurately describes what the body says
@@ -122,7 +124,7 @@ Include `Closes #N` in the PR body for each resolved issue so GitHub auto-closes
 
 Sweep the documentation for drift against the *actual source*, independent of any recent change — the proactive, repo-wide complement to the PR-scoped check in Phase 7. Go through every documentation source of truth (the Phase 7 table) and verify each claim against the code, config, or commands it documents. **Verify against source, never memory.**
 
-`AGENTS.md` opens by promising every claim in it was verified against the source it cites and that "when a claim and the code disagree, the code is right and this file is a bug" — a sweep here means re-walking those citations, including the `file:line` references, not re-reading the prose for plausibility.
+`AGENTS.md` opens by promising every claim in it was verified against the source it cites and that "when a claim and the code disagree, the code is right and this file is a bug" — a sweep here means re-walking those citations, including the `file:line` references, not re-reading the prose for plausibility. The drift note at the top of this skill is a starting point, not the answer.
 
 - Fix drift **in the docs**. If the *code* is what's wrong (the docs describe the intended, correct behavior), do **not** silently change code under a docs cycle — file an issue and leave it for an implementation cycle.
 - If a drift class is mechanically checkable, prefer adding the assertion to `src/docs.test.ts` over fixing the prose alone — that file exists precisely to turn the next occurrence into a test failure. Match its existing style: `?raw` imports, no `node:fs`, a named error when the parsed format changes.
@@ -158,7 +160,7 @@ Phase 3 begins by re-reading this summary. The point is to ground the implementa
 **Localization verification.** Before writing any code, list the files this PR intends to modify and verify each one:
 
 1. **Confirm the file exists.** `test -f <path>` or `ls <path>`.
-2. **Confirm the surface area is present.** For each file, grep for the symbol, heading, config key, or behavior named in the issue. If the issue says "`MenuScene` never resets `levelCards`", run `grep -n 'levelCards' src/game/scenes/MenuScene.ts` and confirm the named entity is present. If it isn't, stop and re-triage — the localization is wrong and editing here would produce a misfire.
+2. **Confirm the surface area is present.** For each file, grep for the symbol, heading, config key, or behavior named in the issue. If the issue says "the stats text in `RiverScene` is placed without an `onLayout()` closure", run `grep -n 'statsText\|onLayout' src/game/scenes/RiverScene.ts` and confirm both named entities are present and related as described. If they are not, stop and re-triage — the localization is wrong and editing here would produce a misfire.
 
 This catches the dominant agent failure mode on uncontaminated benchmarks: finding the right file to edit, not the patch itself (RESEARCH.md §3).
 
@@ -281,6 +283,7 @@ Perform a self-review. This step is anchored on external signals (CI, the rubric
    - **Node-environment safe tests:** no test file in the diff imports `phaser` or touches `window`/`document`.
    - **Style match:** no semicolons, single quotes, 2-space indent, trailing commas in multi-line literals, numeric separators on large ms values.
    - **Scene logic extracted:** any new judgment/selection/timing/outcome logic lives in a plain module with a colocated test, not inside `MenuScene`/`RiverScene`.
+   - **Citations re-verified:** every `file:line` reference this PR adds to or leaves in `AGENTS.md` points at the line it claims, checked after the diff's own line shifts.
    - **Generated and pinned files untouched:** the diff contains no change under `public/audio/`, no edit to the `sharp` override in `package.json`, and no cue-timing/difficulty change in `src/game/levels.ts`.
    - **Lockfile honesty:** `package-lock.json` changes only if `package.json` dependencies changed in the same PR.
 
@@ -363,7 +366,7 @@ This phase is **PR-scoped**: it verifies the docs against *this PR's* implementa
 | `README.md` — "Run it locally" | The Node floor matches `engines.node` and `ci.yml`'s `node-version` (enforced by `docs.test.ts`); the control keys, guide-voice list/default, and orientation claims still match `RiverScene`/`MenuScene` and `guideAudio.ts`. |
 | `README.md` — "Project structure" | Every listed `.ts` path exists (enforced by `docs.test.ts`) and any module this PR added that a newcomer would look for is listed. |
 | `README.md` — "Multiplayer path" | Still describes the real `RaceAdapter` boundary and its existing implementations. |
-| `AGENTS.md` | Every claim and every `file:line` citation this PR could have invalidated — the gate commands, the architecture invariants, the Phaser `init()` reference (`RiverScene.ts:73`), the testing constraints, the `tsconfig.json` flag line numbers, the "Do not touch" list, and the style rules. This file promises it was verified against source; a stale citation here is a bug in the file. |
+| `AGENTS.md` | Every claim and every `file:line` citation this PR could have invalidated — the gate commands, the architecture invariants, the Phaser scene-reuse section and the `init()` line it cites, the testing constraints, the `tsconfig.json` flag line numbers, the "Do not touch" list, and the style rules. This file promises it was verified against source; a stale citation here is a bug in the file, and two are already known stale (see the drift note at the top of this skill). |
 | `.github/workflows/ci.yml` | The commands it runs still exist and still constitute the full gate; the Node version still matches `engines.node`. |
 | `package.json` | `scripts` reflect any command this PR added or renamed; `engines.node` unchanged unless deliberately raised everywhere. |
 | `src/docs.test.ts` | Its parsing assumptions still hold against the current `README.md` structure — if this PR restructured a heading or fenced block it parses, the test's error messages must still name what drifted rather than throwing a format error. |
@@ -480,6 +483,7 @@ Return to Phase 1.
 **A change only shows up when the game renders:** `tsc` and `vitest` never render a frame. Do the manual pass — `npm run dev`, then menu → start a run → Escape back to the menu → start a second run, plus a rotate/resize if layout changed — and record the result in the PR body. A green suite on scene changes is not evidence.
 **An issue requires a harness-blocked or user-gated operation (regenerating `public/audio/`, adding a jsdom test config and dependency, retuning `levels.ts` difficulty, editing agent-loaded config):** recognize it at triage (Phase 1) — surface to the user for explicit authorization rather than attempting it mid-cycle; never remove a path while `README.md` or `AGENTS.md` still references it.
 **`src/docs.test.ts` throws "the format it is parsed from has changed":** the README structure it parses was restructured, not merely edited. Restore the parseable shape or update the parser deliberately in the same PR — do not delete the assertion to make the suite green.
+**An `AGENTS.md` `file:line` citation no longer points at what it claims:** the code is right and the file is a bug (its own words). Fix the citation in the same PR when the PR caused the shift; file a docs issue when it was already stale.
 **The resolved clone is shallow (`git rev-parse --is-shallow-repository` → `true`):** `git fetch --unshallow` before rebasing or reading history; a shallow tree makes `git rebase origin/main` and `git log` misleading.
 **Autonomous multi-cycle batch (`/forward-one-dev-loop until …`):** skip/cap the Phase-5 human-review wait (rubric + green CI is the gate); still hand off do-not-auto-merge/charter PRs. Stop when only blocked, charter-gated, or too-large work remains, or a cycle yields no scoped work.
 **A concurrent session holds the tree or an open PR:** adopt its PR (bring current with `main`, re-run CI, review, merge if green) rather than doing nothing; work in a `git worktree` to avoid colliding, and treat a harmless local `--delete-branch` failure as success once `gh pr view --json state` confirms the merge.
